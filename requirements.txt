@@ -1,0 +1,27 @@
+-f https://download.pytorch.org/whl/torch_stable.html
+# -f https://dl.fbaipublicfiles.com/detectron2/wheels/cu110/torch1.7/index.html
+
+
+torch==1.7.1+cu110 
+torchvision==0.8.2+cu110
+torchaudio==0.7.2
+timm==0.4.5
+natsort
+tensorboard
+nltk
+h5py
+numpy
+fastwer
+fairseq
+scikit-image
+opencv-python
+wand
+
+
+# 아래 패키지 설치 필요
+# apt-get install imagemagick
+# apt-get install git-lfs
+# git lfs clone https://huggingface.co/[허깅페이스 모델 레포 주소]
+
+
+# augmentation 상대경로 . 삭제
