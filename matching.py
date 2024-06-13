@@ -15,22 +15,29 @@ def list_img_files(folder_path):
     return glob.glob(os.path.join(folder_path, '**', '*.png'), recursive=True)
 
 
-def concatenate_image_with_text(images, save_path, res):
-    result = np.ones((images[0].shape[1], images[0].shape[0], 3), dtype=np.uint8) * 255
+def concatenate_image_with_text(cnt, images, save_path, res):
+    result = np.ones((1920, 1080, 3), dtype=np.uint8) * 255
     
     current_x = 0
     for image in images:
         height, width = image.shape[:2]
+        height, width = int(height/4), int(width/4)
+        image = cv2.resize(image, (int(1920/4), int(1080/4)))
         result[0:height, current_x:current_x+width] = image
-        current_x += width + 100
+        current_x += width + 50
     
     # 텍스트 추가
+    p = 50
+    i = 3
+    cv2.putText(result, f"ssim_score: {res[2]}", (50, p), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 1, cv2.LINE_AA)
     for t in res:
-        
-        cv2.putText(result, text, text_position, cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), font_thickness, cv2.LINE_AA)
+        p += 50
+        cv2.putText(result, f"{res[i][0]}: {res[i][1]}", (50, p), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 1, cv2.LINE_AA)
+        i += 1
     
     # 결과 이미지를 파일로 저장
-    cv2.imwrite(output_path, result)
+    file_path = os.join.path(save_path, f"output_img{cnt}.jpg")
+    cv2.imwrite(file_path, result)
 
 
 def compare_images_ssim(image1, image2):
@@ -104,15 +111,18 @@ def main(folder_path, output_csv, save_path):
                 image1 = cv2.imread(img1)
                 image2 = cv2.imread(img2)
                 
-                if image1.shape != image2.shape:
-                    image2 = cv2.resize(image2, (image1.shape[1], image1.shape[0]))
+                image1 = cv2.resize(image1, (1080, 1920))
+                image2 = cv2.resize(image2, (1080, 1920))
+
+                # if image1.shape != image2.shape:
+                #     image2 = cv2.resize(image2, (image1.shape[1], image1.shape[0]))
 
                 # Compare images using SSIM
                 ssim_score, diff_image = compare_images_ssim(image1, image2)
                 opencv_score = opencv_ssim(image1, image2)
 
-                res.append((image1, image2, ssim_score, opencv_score[0][1], opencv_score[1][1], opencv_score[2][1], opencv_score[3][1], opencv_score[4][1]))
-                results.append((img1, img2, ssim_score, opencv_score[0][1], opencv_score[1][1], opencv_score[2][1], opencv_score[3][1], opencv_score[4][1]))
+                res.append((image1, image2, ssim_score, opencv_score[0], opencv_score[1], opencv_score[2], opencv_score[3], opencv_score[4]))
+                results.append((img1, img2, ssim_score, opencv_score[0], opencv_score[1], opencv_score[2], opencv_score[3], opencv_score[4]))
                 temp += 1
                 print(f"{temp} / {len(image_files)-1} ssim 점수:\t\t{ssim_score: .2f}")
                 print(f"{temp} / {len(image_files)-1} correl 점수:\t\t{opencv_score[0][1]: .2f}")
@@ -124,7 +134,7 @@ def main(folder_path, output_csv, save_path):
 
 
                 images = [image1, image2, diff_image]
-                concatenate_image_with_text(images, save_path, res)
+                concatenate_image_with_text(temp, images, save_path, res)
 
 
         end_time = time.time()
