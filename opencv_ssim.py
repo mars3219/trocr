@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 import argparse
 
-# 1. 이미지 파일 리스트업
+# 이미지 파일 리스트업
 def list_img_files(folder_path):
     return glob.glob(os.path.join(folder_path, '**', '*.png'), recursive=True)
 

@@ -10,34 +10,61 @@ import matplotlib.pyplot as plt
 
 import argparse
 
+METHODS= ['CORREL', 'CHISQR', 'INTERSECT', 'BHATTACHARYYA', 'EMD']
+SSIM_THRES = 0.6
+INTERSECT_THRES = 0.8
+BHA_THRES = 0.7
+
 
 def list_img_files(folder_path):
     return glob.glob(os.path.join(folder_path, '**', '*.png'), recursive=True)
 
 
-def concatenate_image_with_text(cnt, images, save_path, res):
-    result = np.ones((1920, 1080, 3), dtype=np.uint8) * 255
-    
-    current_x = 0
-    for image in images:
-        height, width = image.shape[:2]
-        height, width = int(height/4), int(width/4)
-        image = cv2.resize(image, (int(1920/4), int(1080/4)))
-        result[0:height, current_x:current_x+width] = image
-        current_x += width + 50
-    
-    # 텍스트 추가
-    p = 50
-    i = 3
-    cv2.putText(result, f"ssim_score: {res[2]}", (50, p), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 1, cv2.LINE_AA)
-    for t in res:
-        p += 50
-        cv2.putText(result, f"{res[i][0]}: {res[i][1]}", (50, p), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 1, cv2.LINE_AA)
-        i += 1
-    
-    # 결과 이미지를 파일로 저장
-    file_path = os.join.path(save_path, f"output_img{cnt}.jpg")
-    cv2.imwrite(file_path, result)
+def concatenate_image_with_text(images, save_path, ssim_results, flag=True):
+    if flag:
+        result = np.ones((1080, 1920, 3), dtype=np.uint8) * 255
+        
+        current_x = 150
+        for i, image in enumerate(images):
+            height, width = image.shape[:2]
+            height, width = int(height/4), int(width/4)
+            image = cv2.resize(image, (width, height))
+            
+            if i == 2:
+                image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+        
+            result[450:450+height, current_x:current_x+width] = image
+            current_x += width + 50
+        
+        # 텍스트 추가
+        p = 50
+        cv2.putText(result, f"ssim_score: {ssim_results[2]: .2f}", (50, p), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2, cv2.LINE_AA)
+        for i, t in enumerate(ssim_results[5:7]):
+            p += 50
+            cv2.putText(result, f"{METHODS[i+2]}: {t: .2f}", (50, p), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2, cv2.LINE_AA)
+
+        if ssim_results[2] > SSIM_THRES and ssim_results[5] > INTERSECT_THRES and (1-ssim_results[6]) > BHA_THRES:
+            cv2.putText(result, f"Similaraty: YES", (50, p+50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+            ssim = 1
+        else:
+            cv2.putText(result, f"Similaraty: NO", (50, p+50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+            ssim = 0
+        
+        # 결과 이미지를 파일로 저장
+        file_name = ""
+        for e, i in enumerate(ssim_results[:2]):
+            if e == 1: file_name += "_vs_"
+            file_name_with_ext = os.path.basename(i)
+            file_name += os.path.splitext(file_name_with_ext)[0]
+        file_path = os.path.join(save_path, f"{file_name}.jpg")
+        cv2.imwrite(file_path, result)
+        return ssim
+    else:
+        if ssim_results[2] > SSIM_THRES and ssim_results[5] > INTERSECT_THRES and (1-ssim_results[6]) > BHA_THRES:
+            return 1
+        else:
+            return 0
+
 
 
 def compare_images_ssim(image1, image2):
@@ -67,12 +94,9 @@ def opencv_ssim(image1, image2):
     # 1번째 이미지를 원본으로 지정
     query = hists[0]
 
-    # 비교 알고리즘의 이름들을 리스트에 저장
-    methods = ['CORREL', 'CHISQR', 'INTERSECT', 'BHATTACHARYYA', 'EMD']
-
     result = []
     # 5회 반복(5개 비교 알고리즘을 모두 사용)
-    for index, name in enumerate(methods):
+    for index, name in enumerate(METHODS):
         # 비교 알고리즘 이름 출력(문자열 포맷팅 및 탭 적용)
         # print('%-10s' % name, end = '\t')  
         
@@ -90,17 +114,22 @@ def opencv_ssim(image1, image2):
     return result
 
 
-
 def main(folder_path, output_csv, save_path):
     image_files = list_img_files(folder_path)
-    # image_arrays = {img: image_to_array(load_image(os.path.join(folder_path, img))) for img in image_files}
-
     results = []
     cnt = 0
-    temp = 0
 
     for i, img1 in enumerate(image_files):
         cnt += 1
+        temp = 0
+
+        if len(image_files) == cnt: # 마지막 파일일 경우 비교할 대상이 없음
+            # 전체 결과 저장
+            output = os.path.join(output_csv, f"total_ssim.csv")
+            df = pd.DataFrame(results, columns=['origin_path', 'compare_path', 'ssim_score', 'correl_score', 'chisqr_score', 'intersect', 'bhattacharyya_score', 'emd_score', 'similataty_yn'])
+            df.to_csv(output, index=False)
+            return 0
+
         start_time = time.time()
         print("===========================================================================")
         print(f"{cnt}/{len(image_files)-1}번째 이미지: 유사도 비교 시작")
@@ -111,31 +140,31 @@ def main(folder_path, output_csv, save_path):
                 image1 = cv2.imread(img1)
                 image2 = cv2.imread(img2)
                 
-                image1 = cv2.resize(image1, (1080, 1920))
-                image2 = cv2.resize(image2, (1080, 1920))
-
-                # if image1.shape != image2.shape:
-                #     image2 = cv2.resize(image2, (image1.shape[1], image1.shape[0]))
+                image1 = cv2.resize(image1, (1920, 1080))
+                image2 = cv2.resize(image2, (1920, 1080))
 
                 # Compare images using SSIM
                 ssim_score, diff_image = compare_images_ssim(image1, image2)
                 opencv_score = opencv_ssim(image1, image2)
 
-                res.append((image1, image2, ssim_score, opencv_score[0], opencv_score[1], opencv_score[2], opencv_score[3], opencv_score[4]))
-                results.append((img1, img2, ssim_score, opencv_score[0], opencv_score[1], opencv_score[2], opencv_score[3], opencv_score[4]))
+                ssim_results = (img1, img2, ssim_score, opencv_score[0][1], opencv_score[1][1], opencv_score[2][1], opencv_score[3][1], opencv_score[4][1])
                 temp += 1
                 print(f"{temp} / {len(image_files)-1} ssim 점수:\t\t{ssim_score: .2f}")
                 print(f"{temp} / {len(image_files)-1} correl 점수:\t\t{opencv_score[0][1]: .2f}")
                 print(f"{temp} / {len(image_files)-1} chisqr 점수:\t\t{opencv_score[1][1]: .2f}")
-                print(f"{temp} / {len(image_files)-1} intersect 점수:\t\t{opencv_score[2][1]: .2f}")
-                print(f"{temp} / {len(image_files)-1} bhattacharyya 점수:\t{opencv_score[3][1]: .2f}")
+                print(f"{temp} / {len(image_files)-1} intersect 점수:\t{opencv_score[2][1]: .2f}")
+                print(f"{temp} / {len(image_files)-1} bhattacharyya 점수:\t{1-opencv_score[3][1]: .2f}")
                 print(f"{temp} / {len(image_files)-1} emd 점수:\t\t{opencv_score[4][1]: .2f}")
                 print('')
 
 
                 images = [image1, image2, diff_image]
-                concatenate_image_with_text(temp, images, save_path, res)
-
+                result = concatenate_image_with_text(images, save_path, ssim_results, flag=False)   # 이미지 생성(flag): True
+                res_l = list(ssim_results)
+                res_l.append(result)
+                res_l = tuple(res_l)
+                res.append(res_l)
+                results.append(res_l)
 
         end_time = time.time()
         duration = end_time - start_time
@@ -143,17 +172,15 @@ def main(folder_path, output_csv, save_path):
         print(f"처리시간: {duration: .4f}")
         print("===========================================================================")
 
-        # 4. 결과 저장
-        temp_csv = os.path.join(output_csv, f"{img1}.csv")
-        df = pd.DataFrame(res, columns=['Image1', 'Image2', 'ssim_score'])
-        df.to_csv(temp_csv, index=False)
+        # # 이미지 장당 결과 저장
+        # file_name_with_ext = os.path.basename(img1)
+        # file_name = os.path.splitext(file_name_with_ext)[0]
+        # temp_csv = os.path.join(output_csv, f"{file_name}.csv")
+        # df = pd.DataFrame(res, columns=['origin_path', 'compare_path', 'ssim_score', 'correl_score', 'chisqr_score', 'intersect', 'bhattacharyya_score', 'emd_score', 'similataty_yn'])
+        # df.to_csv(temp_csv, index=False)
+
         res.clear()
 
-
-    # 4. 결과 저장
-    output = os.path.join(output_csv, f"total_ssim.csv")
-    df = pd.DataFrame(results, columns=['Image1', 'Image2', 'ssim_score'])
-    df.to_csv(output, index=False)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Calculate image similarities and save results to CSV')
